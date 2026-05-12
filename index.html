@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DACE - SAAF Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .bg-custom-yellow { background-color: #FFD700; }
+        .text-custom-blue { color: #1a237e; }
+        .status-pending { background-color: #fef3c7; color: #92400e; }
+        .status-approved { background-color: #d1fae5; color: #065f46; }
+        .status-denied { background-color: #fee2e2; color: #991b1b; }
+        .hidden-section { display: none !important; }
+
+        section { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-input-line {
+            width: 100%;
+            border: none;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 8px 0;
+            font-weight: 600;
+            color: #1e293b;
+            outline: none;
+            transition: border-color 0.3s;
+            background: transparent;
+        }
+        .form-input-line:focus { border-bottom: 2px solid #FFD700; }
+        .form-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #1e293b;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 9999;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+            opacity: 0;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        #toast.success { background: #065f46; }
+        #toast.error { background: #991b1b; }
+        #toast.info { background: #1e40af; }
+
+        /* OD Preview scaling */
+        .od-preview-wrapper {
+            display: flex;
+            justify-content: center;
+            background: #cbd5e1;
+            padding: 2rem 1rem;
+            overflow: hidden;
+            border-radius: 1.5rem;
+        }
+        #od-preview-frame {
+            transform: scale(0.38);
+            transform-origin: top center;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+            margin-bottom: calc((297mm * 0.38) - 297mm);
+        }
+        @media (min-width: 640px) { #od-preview-frame { transform: scale(0.55); margin-bottom: calc((297mm * 0.55) - 297mm); } }
+        @media (min-width: 1024px) { #od-preview-frame { transform: scale(0.65); margin-bottom: calc((297mm * 0.65) - 297mm); } }
+
+        .a4-page {
+            width: 210mm;
+            height: 297mm;
+            padding: 20mm;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            color: #111827;
+            position: relative;
+        }
+
+        #od-capture-buffer {
+            position: absolute;
+            left: -9999px;
+            top: 0;
+            width: 210mm;
+            height: 297mm;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- OD Hidden Capture Buffer -->
+<div id="od-capture-buffer">
+    <div id="od-capture-frame" class="a4-page"></div>
+</div>
+
+<div id="app">
+    <!-- AUTH VIEW -->
+    <div id="auth-view" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
+            <div class="text-center mb-8">
+                <img src="https://raw.githubusercontent.com/MohammedSulthan07/chatbot-for-health/main/IMG-20260304-WA0029.jpg" alt="Logo" class="h-20 mx-auto mb-4">
+                <h1 class="text-2xl font-bold text-gray-800">SAAF Portal Login</h1>
+                <p class="text-xs text-gray-500 mt-2">DACE Competition Management</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                    <input type="email" id="login-email" placeholder="e.g., stucse104@gmail.com"
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-yellow-400 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="login-password" placeholder="e.g., 1234"
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-yellow-400 outline-none transition-all"
+                        onkeydown="if(event.key==='Enter') handleLogin()">
+                </div>
+                <button onclick="handleLogin()" class="w-full bg-custom-yellow text-gray-900 font-bold py-3 rounded-lg hover:bg-yellow-400 transition-colors shadow-md">
+                    Login
+                </button>
+                <div class="text-[10px] text-gray-400 bg-gray-50 p-3 rounded-lg border border-dashed border-gray-200 mt-4">
+                    <p class="font-bold mb-1 text-gray-600">Testing Accounts:</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <span>Student: 1234</span>
+                        <span>CC: cc123</span>
+                        <span>HOD: hod123</span>
+                        <span>Incharge: in123</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div id="dashboard-view" class="hidden-section">
+        <header class="bg-white border-b p-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+            <div class="flex items-center gap-4">
+                <button onclick="toggleMenu()" class="text-2xl text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+                <img src="https://raw.githubusercontent.com/MohammedSulthan07/chatbot-for-health/main/IMG-20260304-WA0029.jpg" alt="Logo" class="h-10">
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p id="user-display-name" class="font-bold text-sm text-gray-800 leading-none"></p>
+                    <p id="user-role-badge" class="text-[10px] uppercase text-gray-500 font-bold mt-1 tracking-wider"></p>
+                </div>
+                <button onclick="handleLogout()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">
+                    Logout
+                </button>
+            </div>
+        </header>
+
+        <!-- Side Nav -->
+        <div id="navMenu" class="fixed inset-0 bg-black/50 z-[60] hidden backdrop-blur-sm">
+            <div class="bg-white w-72 h-full p-6 space-y-4 shadow-2xl">
+                <div class="flex justify-between items-center mb-8">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 bg-custom-yellow rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-graduation-cap text-gray-900"></i>
+                        </div>
+                        <h2 class="text-xl font-bold text-custom-blue">DACE Menu</h2>
+                    </div>
+                    <button onclick="toggleMenu()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <nav class="flex flex-col gap-2">
+                    <button onclick="showSection('home')" class="nav-btn p-4 text-left rounded-xl hover:bg-slate-50 font-semibold flex items-center gap-4 transition-all">
+                        <i class="fa-solid fa-house text-blue-500 w-5"></i> Home
+                    </button>
+                    <button id="nav-apply-od" onclick="showSection('apply-od')" class="nav-btn p-4 text-left rounded-xl hover:bg-slate-50 font-semibold flex items-center gap-4 transition-all">
+                        <i class="fa-solid fa-file-pen text-orange-500 w-5"></i> SIPH OD Apply Form
+                    </button>
+                    <button onclick="showSection('winners')" class="nav-btn p-4 text-left rounded-xl hover:bg-slate-50 font-semibold flex items-center gap-4 transition-all">
+                        <i class="fa-solid fa-trophy text-yellow-500 w-5"></i> Winners
+                    </button>
+                    <button id="nav-approvals" onclick="showSection('approvals')" class="nav-btn p-4 text-left rounded-xl hover:bg-slate-50 font-semibold flex items-center gap-4 transition-all">
+                        <i class="fa-solid fa-clipboard-check text-green-500 w-5"></i> Pending Approvals
+                    </button>
+                    <button id="nav-add-event" onclick="showSection('add-event')" class="nav-btn p-4 text-left rounded-xl hover:bg-slate-50 font-semibold flex items-center gap-4 transition-all">
+                        <i class="fa-solid fa-calendar-plus text-purple-500 w-5"></i> Event Manager
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <main class="max-w-3xl mx-auto p-4 space-y-6 pb-20">
+
+            <!-- HOME -->
+            <section id="section-home" class="space-y-6">
+                <div class="bg-custom-yellow rounded-2xl p-6 shadow-lg text-center">
+                    <h1 class="text-3xl font-black text-gray-800 tracking-tight">DACE Competitions</h1>
+                    <p class="text-gray-700 font-medium opacity-80">Empowering Innovators</p>
+                </div>
+                <div class="bg-white rounded-3xl border border-gray-100 p-2 shadow-sm">
+                    <img src="https://raw.githubusercontent.com/MohammedSulthan07/chatbot-for-health/main/IMG-20260304-WA0029.jpg"
+                        alt="Event Banner" class="w-full rounded-2xl mb-2 opacity-60 grayscale hover:grayscale-0 transition-all duration-700">
+                    <div class="flex justify-center gap-2 pb-2">
+                        <span class="w-2 h-2 bg-gray-800 rounded-full"></span>
+                        <span class="w-2 h-2 bg-gray-200 rounded-full"></span>
+                        <span class="w-2 h-2 bg-gray-200 rounded-full"></span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4">
+                    <a href="https://forms.gle/7BYiu3a5Y2qQPGA88" target="_blank"
+                        class="flex items-center justify-between bg-custom-yellow hover:bg-yellow-400 transition-all p-5 rounded-2xl shadow-md group">
+                        <span class="text-lg font-bold text-gray-900">Competition Registration Form</span>
+                        <i class="fa-solid fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
+                    </a>
+                    <a href="https://forms.gle/yU8tdi5xsmQspSqt5" target="_blank"
+                        class="flex items-center justify-between bg-custom-yellow hover:bg-yellow-400 transition-all p-5 rounded-2xl shadow-md group">
+                        <span class="text-lg font-bold text-gray-900">Competition Completion Form</span>
+                        <i class="fa-solid fa-check-double group-hover:scale-110 transition-transform"></i>
+                    </a>
+                </div>
+                <h2 class="text-2xl font-bold text-custom-blue mt-8 flex items-center gap-2">
+                    <i class="fa-solid fa-fire text-orange-500"></i> Upcoming Events
+                </h2>
+                <div id="events-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </section>
+
+            <!-- WINNERS -->
+            <section id="section-winners" class="hidden-section space-y-6">
+                <h2 class="text-3xl font-bold text-custom-blue border-b pb-4">Wall of Fame</h2>
+                <div class="bg-white rounded-3xl border-2 border-dashed border-gray-200 p-12 text-center">
+                    <div class="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa-solid fa-trophy text-4xl text-yellow-400"></i>
+                    </div>
+                    <p class="text-gray-500 font-medium text-lg">Winner announcements will appear here shortly.</p>
+                    <p class="text-gray-400 text-sm mt-2">Check back after the competition concludes.</p>
+                </div>
+            </section>
+
+            <!-- APPLY OD -->
+            <section id="section-apply-od" class="hidden-section space-y-8">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-3xl font-bold text-custom-blue">SIPH Access Form (SAAF)</h2>
+                    <span class="text-[10px] font-bold px-3 py-1 bg-blue-100 text-blue-700 rounded-full uppercase">Academic Year 24-25</span>
+                </div>
+
+                <form id="od-form" class="bg-white p-10 rounded-[40px] shadow-2xl border border-gray-50 space-y-8">
+                    <div class="space-y-8">
+                        <div>
+                            <label class="form-label">Full Name (as per ID)</label>
+                            <input type="text" id="stu-name" required placeholder="Enter your full name" class="form-input-line">
+                        </div>
+                        <div>
+                            <label class="form-label">Register Number</label>
+                            <input type="text" id="stu-reg" required placeholder="e.g., 410623104071" class="form-input-line">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-10">
+                            <div>
+                                <label class="form-label">Department</label>
+                                <select id="stu-dept" class="form-input-line cursor-pointer">
+                                    <option value="CSE">Computer Science and Engineering (CSE)</option>
+                                    <option value="AIDS">Artificial Intelligence and Data Science (AIDS)</option>
+                                    <option value="ECE">Electronics and Communication Engineering (ECE)</option>
+                                    <option value="EEE">Electrical and Electronics Engineering (EEE)</option>
+                                    <option value="Robotics">Robotics and Automation</option>
+                                    <option value="MECH">Mechanical Engineering (MECH)</option>
+                                    <option value="Petro">Petroleum Engineering (Petro)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label">Year / Sem / Sec</label>
+                                <input type="text" id="stu-meta" placeholder="e.g., 3 / 6 / B" required class="form-input-line">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label">Event / Competition Name</label>
+                            <input type="text" id="event-name" placeholder="Enter event name" required class="form-input-line">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-10">
+                            <div>
+                                <label class="form-label">Start Date</label>
+                                <input type="date" id="date-from" required class="form-input-line block">
+                            </div>
+                            <div>
+                                <label class="form-label">End Date</label>
+                                <input type="date" id="date-to" required class="form-input-line block">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-4">
+                        <button type="submit" class="w-full bg-custom-blue text-white font-bold py-5 rounded-2xl shadow-xl hover:shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2 text-lg">
+                            <i class="fa-solid fa-paper-plane"></i> Submit Application
+                        </button>
+                    </div>
+                </form>
+
+                <div class="pt-6">
+                    <h3 class="text-xl font-bold flex items-center gap-2 mb-4">
+                        <i class="fa-solid fa-clock-rotate-left text-gray-400"></i> My SAAF History
+                    </h3>
+                    <div id="student-history" class="grid grid-cols-1 gap-4"></div>
+                </div>
+            </section>
+
+            <!-- APPROVALS -->
+            <section id="section-approvals" class="hidden-section space-y-6">
+                <h2 class="text-2xl font-bold text-gray-800">Pending Approvals</h2>
+                <div id="approvals-list" class="grid grid-cols-1 gap-4"></div>
+            </section>
+
+            <!-- EVENT MANAGER -->
+            <section id="section-add-event" class="hidden-section space-y-6">
+                <h2 class="text-2xl font-bold text-custom-blue">Event Management</h2>
+                <form id="event-form" class="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 space-y-6">
+                    <div class="grid grid-cols-1 gap-6">
+                        <div>
+                            <label class="form-label">Competition Title</label>
+                            <input type="text" id="new-title" placeholder="Smart India Hackathon..." required class="form-input-line">
+                        </div>
+                        <div>
+                            <label class="form-label">Venue / Mode</label>
+                            <input type="text" id="new-loc" placeholder="Chennai / Online" required class="form-input-line">
+                        </div>
+                        <div>
+                            <label class="form-label">Poster URL (Optional)</label>
+                            <input type="text" id="new-img" placeholder="https://..." class="form-input-line">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white font-bold py-4 rounded-2xl hover:bg-green-700 transition-colors shadow-lg">
+                        Publish Event
+                    </button>
+                </form>
+            </section>
+
+            <!-- OD GENERATOR (unlocked after full approval) -->
+            <section id="section-od-gen" class="hidden-section space-y-6">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-2xl font-bold text-custom-blue flex items-center gap-2">
+                        <i class="fa-solid fa-file-circle-check text-green-600"></i> OD Letter
+                    </h2>
+                    <span class="text-[10px] font-bold px-3 py-1 bg-green-100 text-green-700 rounded-full uppercase tracking-wide">
+                        <i class="fa-solid fa-check-double mr-1"></i>Fully Approved
+                    </span>
+                </div>
+
+                <div class="bg-white rounded-3xl border border-gray-100 shadow-xl p-6 space-y-6">
+                    <!-- Info banner -->
+                    <div class="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-800 flex items-start gap-3">
+                        <i class="fa-solid fa-circle-check text-green-500 mt-0.5 text-base flex-shrink-0"></i>
+                        <div>
+                            <p class="font-bold">All 3 approvals granted</p>
+                            <p class="font-medium opacity-80 mt-0.5">Your OD letter is ready. You can download it as a high-resolution image or print it as PDF.</p>
+                        </div>
+                    </div>
+
+                    <!-- OD Live Preview -->
+                    <div class="od-preview-wrapper" style="min-height: 320px;">
+                        <div id="od-preview-frame" class="a4-page"></div>
+                    </div>
+
+                    <!-- Download Buttons -->
+                    <div class="flex flex-col sm:flex-row gap-3 pt-2">
+                        <button onclick="downloadODpng()" id="od-png-btn"
+                            class="flex-1 bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95">
+                            <i class="fa-solid fa-image"></i> Download as PNG
+                        </button>
+                        <button onclick="printOD()"
+                            class="flex-1 bg-gray-800 text-white font-bold py-4 rounded-2xl hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-95">
+                            <i class="fa-solid fa-file-pdf"></i> Save as PDF
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- OD Print Styles -->
+<style id="od-print-style">
+    @media print {
+        body > *:not(#od-print-target) { display: none !important; }
+        #od-print-target {
+            display: block !important;
+            width: 210mm;
+            margin: 0 auto;
+        }
+        @page { size: A4; margin: 0; }
+    }
+</style>
+<div id="od-print-target" style="display:none;"></div>
+
+<script>
+    // ─── DATA ────────────────────────────────────────────────────────────────
+    const USERS = {
+        "stucse104@gmail.com": { pass: "1234", role: "student", dept: "CSE", name: "Student 104" },
+        "cccse@gmail.com":     { pass: "cc123",  role: "cc",       dept: "CSE", name: "Prof. Rajesh (CC)" },
+        "hodcse@gmail.com":    { pass: "hod123", role: "hod",      dept: "CSE", name: "Dr. Sathish (HOD)" },
+        "incse@gmail.com":     { pass: "in123",  role: "incharge", dept: "CSE", name: "Head Incharge (SAAF)" }
+    };
+
+    let currentUser = null;
+    let db = {
+        applications: JSON.parse(localStorage.getItem('db_apps')   || '[]'),
+        events:       JSON.parse(localStorage.getItem('db_events')  || '[]')
+    };
+
+    if (db.events.length === 0) {
+        db.events = [
+            { id: 1, title: "DACE Hackathon 2024", loc: "Block A Labs",  img: "https://raw.githubusercontent.com/MohammedSulthan07/chatbot-for-health/main/IMG-20260304-WA0029.jpg" },
+            { id: 2, title: "Tech Symposium 2.0",  loc: "Auditorium",    img: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80" }
+        ];
+        saveDB();
+    }
+
+    function saveDB() {
+        localStorage.setItem('db_apps',   JSON.stringify(db.applications));
+        localStorage.setItem('db_events', JSON.stringify(db.events));
+    }
+
+    // ─── TOAST ───────────────────────────────────────────────────────────────
+    function toast(msg, type = 'info') {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = `show ${type}`;
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => { t.className = ''; }, 3000);
+    }
+
+    // ─── AUTH ────────────────────────────────────────────────────────────────
+    function handleLogin() {
+        const email = document.getElementById('login-email').value.trim();
+        const pass  = document.getElementById('login-password').value;
+        if (USERS[email] && USERS[email].pass === pass) {
+            currentUser = { ...USERS[email], email };
+            document.getElementById('auth-view').classList.add('hidden-section');
+            document.getElementById('dashboard-view').classList.remove('hidden-section');
+            document.getElementById('user-display-name').innerText = currentUser.name;
+            document.getElementById('user-role-badge').innerText = currentUser.role === 'incharge' ? 'Incharge' : currentUser.role;
+            setupPermissions();
+            showSection('home');
+            window.scrollTo(0, 0);
+        } else {
+            toast("Incorrect email or password.", "error");
+        }
+    }
+
+    function handleLogout() {
+        if (confirm("Are you sure you want to log out?")) location.reload();
+    }
+
+    function setupPermissions() {
+        const r = currentUser.role;
+        document.getElementById('nav-apply-od').classList.toggle('hidden', r !== 'student');
+        document.getElementById('nav-approvals').classList.toggle('hidden', r === 'student');
+        document.getElementById('nav-add-event').classList.toggle('hidden', r !== 'incharge');
+    }
+
+    // ─── NAVIGATION ──────────────────────────────────────────────────────────
+    function toggleMenu() {
+        document.getElementById('navMenu').classList.toggle('hidden');
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden-section'));
+        const target = document.getElementById('section-' + id);
+        if (target) target.classList.remove('hidden-section');
+        if (id === 'home')       renderEvents();
+        if (id === 'apply-od')   renderHistory();
+        if (id === 'approvals')  renderApprovals();
+        document.getElementById('navMenu').classList.add('hidden');
+        window.scrollTo(0, 0);
+    }
+
+    // ─── SUBMIT APPLICATION ───────────────────────────────────────────────────
+    document.getElementById('od-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const app = {
+            id: Date.now(),
+            studentEmail: currentUser.email,
+            studentName: document.getElementById('stu-name').value,
+            regNo: document.getElementById('stu-reg').value,
+            dept: document.getElementById('stu-dept').value,
+            meta: document.getElementById('stu-meta').value,
+            event: document.getElementById('event-name').value,
+            from: document.getElementById('date-from').value,
+            to: document.getElementById('date-to').value,
+            cc: 0, hod: 0, incharge: 0,
+            status: 'pending',
+            ccRemark: '', hodRemark: '', inchargeRemark: ''
+        };
+        db.applications.push(app);
+        saveDB();
+        toast("Application submitted successfully!", "success");
+        e.target.reset();
+        renderHistory();
+    });
+
+    // ─── STUDENT HISTORY ─────────────────────────────────────────────────────
+    function renderHistory() {
+        const list = document.getElementById('student-history');
+        const myApps = db.applications.filter(a => a.studentEmail === currentUser.email);
+        list.innerHTML = myApps.length
+            ? ''
+            : '<div class="bg-gray-100 p-8 rounded-2xl text-center text-gray-400">No applications found.</div>';
+
+        [...myApps].reverse().forEach(app => {
+            const item = document.createElement('div');
+            item.className = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100";
+
+            let sLabel = "Under Review", sClass = "status-pending";
+            if (app.status === 'denied')   { sLabel = "Rejected"; sClass = "status-denied"; }
+            if (app.status === 'approved') { sLabel = "Approved"; sClass = "status-approved"; }
+
+            // Approval dots with labels
+            const dots = `
+                <div class="flex gap-3 mt-3 items-center">
+                    <div class="flex items-center gap-1">
+                        <span class="w-2.5 h-2.5 rounded-full ${app.cc === 1 ? 'bg-green-500' : (app.status === 'denied' && app.ccRemark ? 'bg-red-400' : 'bg-gray-200')}"></span>
+                        <span class="text-[10px] font-bold text-gray-400 uppercase">CC</span>
+                    </div>
+                    <span class="text-gray-200">→</span>
+                    <div class="flex items-center gap-1">
+                        <span class="w-2.5 h-2.5 rounded-full ${app.hod === 1 ? 'bg-green-500' : (app.status === 'denied' && app.hodRemark ? 'bg-red-400' : 'bg-gray-200')}"></span>
+                        <span class="text-[10px] font-bold text-gray-400 uppercase">HOD</span>
+                    </div>
+                    <span class="text-gray-200">→</span>
+                    <div class="flex items-center gap-1">
+                        <span class="w-2.5 h-2.5 rounded-full ${app.incharge === 1 ? 'bg-green-500' : (app.status === 'denied' && app.inchargeRemark ? 'bg-red-400' : 'bg-gray-200')}"></span>
+                        <span class="text-[10px] font-bold text-gray-400 uppercase">Incharge</span>
+                    </div>
+                </div>`;
+
+            // Show rejection reason if denied
+            const remarkSection = app.status === 'denied' && (app.ccRemark || app.hodRemark || app.inchargeRemark)
+                ? `<div class="mt-3 bg-red-50 border border-red-100 rounded-xl p-3">
+                       <p class="text-[10px] font-black text-red-400 uppercase mb-1">Rejection Reason</p>
+                       <p class="text-sm text-red-700 font-medium">${app.ccRemark || app.hodRemark || app.inchargeRemark}</p>
+                   </div>`
+                : '';
+
+            // Show OD button if fully approved
+            const odBtn = app.status === 'approved'
+                ? `<button onclick="openODGenerator(${app.id})"
+                        class="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 transition-all flex items-center justify-center gap-2 shadow-md">
+                        <i class="fa-solid fa-file-arrow-down"></i> Download OD Letter
+                   </button>`
+                : '';
+
+            item.innerHTML = `
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div class="flex-1">
+                        <p class="font-bold text-gray-800">${app.event}</p>
+                        <p class="text-xs text-gray-400 font-bold mt-0.5">${app.from} → ${app.to}</p>
+                        ${dots}
+                        ${remarkSection}
+                        ${odBtn}
+                    </div>
+                    <span class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${sClass} self-start sm:self-center flex-shrink-0">${sLabel}</span>
+                </div>`;
+            list.appendChild(item);
+        });
+    }
+
+    // ─── OPEN OD GENERATOR ───────────────────────────────────────────────────
+    let activeODApp = null;
+    let base64Logo = "";
+
+    async function openODGenerator(appId) {
+        const app = db.applications.find(a => a.id === appId);
+        if (!app || app.status !== 'approved') return;
+        activeODApp = app;
+
+        // Preload logo if not already done
+        if (!base64Logo) base64Logo = await preloadLogo();
+
+        renderODLetter();
+        showSection('od-gen');
+    }
+
+    async function preloadLogo() {
+        const LOGO_SRC = "https://github.com/MohammedSulthan07/chatbot-for-health/raw/main/IMG-20260304-WA0029.jpg";
+        try {
+            const response = await fetch(LOGO_SRC);
+            const blob = await response.blob();
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+        } catch {
+            return LOGO_SRC;
+        }
+    }
+
+    function getODHTML(app) {
+        const fmt = (d) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
+        const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+        const timestamp = new Date().toLocaleString('en-GB', { hour12: false });
+        // Generate unique ref from app id
+        const ref = `SIPH/OD/2026/${app.regNo ? app.regNo.slice(-4) : app.id.toString().slice(-4)}`;
+
+        return `
+            <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:4px solid #1e3a8a;padding-bottom:1.5rem;margin-bottom:2.5rem;">
+                <img src="${base64Logo}" style="height:96px;width:auto;object-fit:contain;">
+                <div style="text-align:right;">
+                    <h1 style="font-size:1.75rem;font-weight:900;color:#1e3a8a;letter-spacing:-0.02em;margin:0;">ON-DUTY REQUISITION</h1>
+                    <p style="font-size:0.75rem;font-weight:700;color:#2563eb;letter-spacing:0.1em;text-transform:uppercase;margin:4px 0 0;">SIPH Research & Development</p>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;margin-bottom:2rem;font-weight:700;font-size:0.875rem;">
+                <p style="margin:0;">Ref: ${ref}</p>
+                <p style="margin:0;">Date: ${today}</p>
+            </div>
+
+            <div style="margin-bottom:2rem;font-size:1rem;line-height:1.7;">
+                <p style="margin:0;font-weight:700;">To,</p>
+                <p style="margin:0;">The Head of the Department,</p>
+                <p style="margin:0;font-weight:700;color:#1e3a8a;text-transform:uppercase;">${app.dept}</p>
+                <p style="margin:0;">SIPH Campus Office.</p>
+            </div>
+
+            <div style="margin-bottom:2.5rem;text-align:center;border-top:2px solid #f1f5f9;border-bottom:2px solid #f1f5f9;padding:0.75rem 0;">
+                <p style="margin:0;font-weight:700;font-size:1rem;font-style:italic;text-decoration:underline;text-underline-offset:4px;">
+                    Subject: Requesting Permission for On-Duty (OD) – ${app.event}
+                </p>
+            </div>
+
+            <div style="font-size:1rem;line-height:1.9;text-align:justify;flex-grow:1;">
+                <p style="margin:0 0 1rem;">Respected Sir/Madam,</p>
+                <p style="margin:0 0 1rem;">
+                    I, <strong style="color:#1e3a8a;text-transform:uppercase;border-bottom:1px solid #bfdbfe;">${app.studentName}</strong>,
+                    bearing Register Number <strong>${app.regNo || '—'}</strong>, a student of
+                    <strong>${app.meta ? app.meta.split('/')[0].trim() + ' Year' : '—'}</strong>
+                    (Year/Sem/Sec: <strong>${app.meta || '—'}</strong>),
+                    Department of <strong>${app.dept}</strong>, hereby submit this request for your kind approval.
+                </p>
+                <p style="margin:0 0 1rem;">
+                    I am participating in the <strong>${app.event}</strong> event at SIPH.
+                    In this connection, I kindly request you to grant me On-Duty (OD) permission
+                    from <strong>${fmt(app.from)}</strong> to <strong>${fmt(app.to)}</strong>.
+                </p>
+                <p style="margin:0 0 1rem;">
+                    I assure you that I will diligently complete any academic requirements or classes missed during this period.
+                </p>
+                <p style="margin:0;">Thanking you,</p>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;margin-top:3rem;margin-bottom:2rem;">
+                <div style="text-align:center;">
+                    <div style="width:180px;border-bottom:2px solid black;margin-bottom:8px;height:40px;"></div>
+                    <p style="margin:0;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#6b7280;">Student Signature</p>
+                    <p style="margin:4px 0 0;font-size:10px;color:#9ca3af;">${app.studentName}</p>
+                </div>
+                <div style="text-align:center;">
+                    <div style="width:180px;border-bottom:2px solid black;margin-bottom:8px;height:40px;"></div>
+                    <p style="margin:0;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#6b7280;">CC Approval</p>
+                </div>
+                <div style="text-align:center;">
+                    <div style="width:180px;border-bottom:2px solid black;margin-bottom:8px;height:40px;"></div>
+                    <p style="margin:0;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#6b7280;">HOD Approval</p>
+                </div>
+            </div>
+
+            <div style="border-top:2px solid #f1f5f9;padding-top:1rem;display:flex;justify-content:space-between;align-items:flex-end;">
+                <p style="margin:0;font-size:9px;font-weight:900;color:#d1d5db;text-transform:uppercase;letter-spacing:0.1em;">SIPH Official Document</p>
+                <div style="text-align:right;">
+                    <p style="margin:0;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;">System Generated · All Approvals Verified</p>
+                    <p style="margin:2px 0 0;font-size:10px;font-family:monospace;color:#6b7280;">${timestamp}</p>
+                </div>
+            </div>`;
+    }
+
+    function renderODLetter() {
+        if (!activeODApp) return;
+        const html = getODHTML(activeODApp);
+        document.getElementById('od-preview-frame').innerHTML = html;
+        document.getElementById('od-capture-frame').innerHTML = html;
+    }
+
+    async function downloadODpng() {
+        if (!activeODApp) return;
+        const btn = document.getElementById('od-png-btn');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
+        btn.disabled = true;
+
+        if (!base64Logo) base64Logo = await preloadLogo();
+        renderODLetter();
+
+        try {
+            const canvas = await html2canvas(document.getElementById('od-capture-frame'), {
+                scale: 3,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+                width: 794,
+                height: 1123
+            });
+            const link = document.createElement('a');
+            link.download = `OD_${activeODApp.regNo || activeODApp.studentName.replace(/\s+/g,'_')}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+            toast("OD Letter downloaded!", "success");
+        } catch (err) {
+            toast("PNG failed. Try 'Save as PDF' instead.", "error");
+        } finally {
+            btn.innerHTML = '<i class="fa-solid fa-image"></i> Download as PNG';
+            btn.disabled = false;
+        }
+    }
+
+    function printOD() {
+        if (!activeODApp) return;
+        // Clone capture frame into print target and trigger print
+        const printTarget = document.getElementById('od-print-target');
+        printTarget.innerHTML = document.getElementById('od-capture-frame').innerHTML;
+        printTarget.style.display = 'block';
+        window.print();
+        setTimeout(() => { printTarget.style.display = 'none'; }, 1000);
+    }
+
+    // ─── APPROVALS ────────────────────────────────────────────────────────────
+    function renderApprovals() {
+        const list = document.getElementById('approvals-list');
+        list.innerHTML = '';
+        const pending = db.applications.filter(app => {
+            if (app.status !== 'pending') return false;
+            if (currentUser.role !== 'incharge' && app.dept !== currentUser.dept) return false;
+            if (currentUser.role === 'cc'       && app.cc === 0) return true;
+            if (currentUser.role === 'hod'      && app.cc === 1 && app.hod === 0) return true;
+            if (currentUser.role === 'incharge' && app.hod === 1 && app.incharge === 0) return true;
+            return false;
+        });
+
+        if (pending.length === 0) {
+            list.innerHTML = '<div class="p-10 text-center text-gray-400 italic bg-white rounded-3xl border">No pending requests at this time.</div>';
+            return;
+        }
+
+        pending.forEach(app => {
+            const card = document.createElement('div');
+            card.className = "bg-white p-6 rounded-3xl border shadow-lg border-gray-100";
+            card.innerHTML = `
+                <h4 class="font-bold text-xl">${app.studentName}</h4>
+                <p class="text-xs text-gray-500 mb-1">${app.dept} | ${app.meta}</p>
+                <p class="text-xs text-gray-400 mb-4">Reg: ${app.regNo || 'N/A'}</p>
+                <div class="bg-slate-50 p-4 rounded-xl mb-4 text-sm">
+                    <p><strong>Event:</strong> ${app.event}</p>
+                    <p><strong>Period:</strong> ${app.from} → ${app.to}</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Rejection Reason (required if rejecting)</label>
+                    <input type="text" id="remark-${app.id}" placeholder="e.g., Dates conflict with exams" class="form-input-line mt-1">
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="processApp(${app.id}, 1)" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition">
+                        <i class="fa-solid fa-check mr-1"></i>Approve
+                    </button>
+                    <button onclick="processApp(${app.id}, 2)" class="flex-1 bg-red-50 text-red-600 py-3 rounded-xl font-bold hover:bg-red-100 transition border border-red-100">
+                        <i class="fa-solid fa-xmark mr-1"></i>Reject
+                    </button>
+                </div>`;
+            list.appendChild(card);
+        });
+    }
+
+    function processApp(id, result) {
+        const app = db.applications.find(a => a.id === id);
+        if (!app) return;
+        const remarkEl = document.getElementById(`remark-${id}`);
+        const remark = remarkEl ? remarkEl.value.trim() : '';
+
+        if (result === 2) {
+            if (!remark) {
+                toast("Please provide a rejection reason.", "error");
+                remarkEl && remarkEl.focus();
+                return;
+            }
+            app.status = 'denied';
+            if (currentUser.role === 'cc')       app.ccRemark = remark;
+            else if (currentUser.role === 'hod') app.hodRemark = remark;
+            else                                 app.inchargeRemark = remark;
+            toast("Application rejected.", "error");
+        } else {
+            if (currentUser.role === 'cc')       app.cc = 1;
+            else if (currentUser.role === 'hod') app.hod = 1;
+            else if (currentUser.role === 'incharge') {
+                app.incharge = 1;
+                app.status = 'approved';
+                toast("Fully approved! OD letter unlocked for student.", "success");
+            } else {
+                toast("Approved ✓", "success");
+            }
+            if (app.status !== 'approved') toast("Approved ✓ — passed to next stage.", "success");
+        }
+        saveDB();
+        renderApprovals();
+    }
+
+    // ─── EVENTS ───────────────────────────────────────────────────────────────
+    function renderEvents() {
+        const list = document.getElementById('events-list');
+        list.innerHTML = '';
+        db.events.forEach(ev => {
+            const card = document.createElement('div');
+            card.className = "bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100";
+            card.innerHTML = `
+                <img src="${ev.img}" class="h-32 w-full object-cover">
+                <div class="p-4">
+                    <h4 class="font-bold text-gray-800">${ev.title}</h4>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fa-solid fa-location-dot"></i> ${ev.loc}</p>
+                </div>`;
+            list.appendChild(card);
+        });
+    }
+
+    document.getElementById('event-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const newEv = {
+            id: Date.now(),
+            title: document.getElementById('new-title').value,
+            loc:   document.getElementById('new-loc').value,
+            img:   document.getElementById('new-img').value || 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&q=80'
+        };
+        db.events.unshift(newEv);
+        saveDB();
+        toast("Event published!", "success");
+        e.target.reset();
+        showSection('home');
+    });
+</script>
+</body>
+</html>

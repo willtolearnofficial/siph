@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1,
+    "title": "DACE Hackathon 2024",
+    "loc": "Block A Labs",
+    "img": "https://raw.githubusercontent.com/MohammedSulthan07/chatbot-for-health/main/IMG-20260304-WA0029.jpg"
+  },
+  {
+    "id": 2,
+    "title": "Tech Symposium 2.0",
+    "loc": "Auditorium",
+    "img": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80"
+  }
+]
